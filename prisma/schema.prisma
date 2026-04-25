@@ -1,0 +1,110 @@
+// Reference schema for Slack Standup Scheduler data modeling.
+// Runtime persistence in this project uses direct SQL via `pg` in `lib/database.ts`.
+// No Prisma client generation is used in this build.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id               Int       @id @default(autoincrement())
+  teamId           String    @unique @map("team_id")
+  teamName         String    @map("team_name")
+  botToken         String    @map("bot_token")
+  botUserId        String?   @map("bot_user_id")
+  defaultChannelId String?   @map("default_channel_id")
+  standupQuestion  String    @map("standup_question")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  members          TeamMember[]
+  schedules        StandupSchedule[]
+
+  @@map("workspaces")
+}
+
+model TeamMember {
+  id               Int       @id @default(autoincrement())
+  workspaceId      Int       @map("workspace_id")
+  slackUserId      String    @map("slack_user_id")
+  displayName      String    @map("display_name")
+  timezone         String
+  utcOffsetMinutes Int       @map("utc_offset_minutes")
+  isDeleted        Boolean   @default(false) @map("is_deleted")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, slackUserId])
+  @@map("team_members")
+}
+
+model StandupSchedule {
+  id                   Int          @id @default(autoincrement())
+  workspaceId          Int          @map("workspace_id")
+  channelId            String       @map("channel_id")
+  timezone             String
+  standupTimeLocal     DateTime     @map("standup_time_local")
+  daysOfWeek           Int[]        @map("days_of_week")
+  reminderDelayMinutes Int          @map("reminder_delay_minutes")
+  question             String
+  isActive             Boolean      @default(true) @map("is_active")
+  nextRunAt            DateTime     @map("next_run_at")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+  workspace            Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  runs                 StandupRun[]
+
+  @@unique([workspaceId, channelId])
+  @@map("standup_schedules")
+}
+
+model StandupRun {
+  id             Int               @id @default(autoincrement())
+  scheduleId     Int               @map("schedule_id")
+  workspaceId    Int               @map("workspace_id")
+  channelId      String            @map("channel_id")
+  standupDate    DateTime          @map("standup_date")
+  postedTs       String            @map("posted_ts")
+  threadTs       String            @map("thread_ts")
+  reminderSentAt DateTime?         @map("reminder_sent_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  schedule       StandupSchedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  responses      StandupResponse[]
+
+  @@unique([scheduleId, standupDate])
+  @@map("standup_runs")
+}
+
+model StandupResponse {
+  id           Int       @id @default(autoincrement())
+  runId        Int       @map("run_id")
+  slackUserId  String    @map("slack_user_id")
+  messageTs    String    @map("message_ts")
+  responseText String    @map("response_text")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  run          StandupRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, slackUserId])
+  @@map("standup_responses")
+}
+
+model Purchase {
+  id             Int      @id @default(autoincrement())
+  email          String   @unique
+  stripeSessionId String  @unique @map("stripe_session_id")
+  stripeCustomerId String? @map("stripe_customer_id")
+  amountTotal    Int?     @map("amount_total")
+  currency       String?
+  status         String
+  metadata       Json
+  purchasedAt    DateTime @default(now()) @map("purchased_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("purchases")
+}
